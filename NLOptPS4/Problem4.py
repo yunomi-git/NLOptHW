@@ -1,6 +1,12 @@
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.datasets import fetch_openml
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
 
 def get_loss_derivative(W, x, y):
     num_data = len(x)
@@ -30,8 +36,6 @@ def indicator_i(num_label, yi):
 def log_der_matrix_i(zi, yi):
     # zi is 1 x data
     num_label = len(zi)
-    # multiplier = np.exp(zi[yi]) / (np.sum(np.exp(zi)))**2
-    # multiplier = 1 / (np.sum(np.exp(zi)))
     return (-np.exp(zi)/ (np.sum(np.exp(zi))) + indicator_i(num_label, yi))
 
 def get_numerical_derivative(W, x, y, step):
@@ -63,7 +67,7 @@ class Model:
     def __init__(self, num_class, num_input_dim):
         self.num_class = num_class
         self.num_input_dim = num_input_dim
-        self.W = np.random.rand(num_label, num_input_dim)
+        self.W = np.random.rand(num_class, num_input_dim)
 
     def forward(self, x):
         # x is data x dims
@@ -116,19 +120,20 @@ def debug_loss_equivalent(model: Model, x, y):
     print(loss_model)
 
 
-
-def optimize(model: Model, data_manager: DataManager, learning_rate, num_epochs):
+def optimize(model: Model, data_manager: DataManager, learning_rate, num_epochs, momentum=1.0):
     num_iterations = int(data_manager.num_data / data_manager.batch_size)
     accuracy_history = []
     for e in tqdm(range(num_epochs)):
         loss = 0
         preds = []
         actual = []
+        momentum_gradient = 0
         for i in range(num_iterations):
             x_batch, y_batch = data_manager.get_random_batch()
             sm = model.forward(x_batch)
-            derivative = get_loss_derivative(model.W, x_batch, y_batch)
-            model.W = model.W - learning_rate * derivative
+            gradient = get_loss_derivative(model.W, x_batch, y_batch)
+            momentum_gradient += momentum * gradient + (1 - momentum) * momentum_gradient
+            model.W = model.W - learning_rate * gradient
 
             # Logging
             preds.append(model.get_logits(sm))
@@ -146,16 +151,19 @@ def optimize(model: Model, data_manager: DataManager, learning_rate, num_epochs)
     plt.show()
 
 
-def debug_gradient_accuracy(x, y):
+def debug_gradient_accuracy():
+    num_label = 5
+    num_data = 1000
+    input_dimensions = 5
+    y = np.random.randint(0, 5, num_data)
+    x = np.random.rand(num_data, input_dimensions)
+    x = np.concatenate([np.ones((num_data, 1)), x], axis=1)
     W = np.random.rand(num_label, input_dimensions+1)
-    # print(W)
     derivative = get_loss_derivative(W, x, y)
-    # print(derivative)
     num_derivative = get_numerical_derivative(W, x, y, step=0.001)
-    # print(num_derivative)
     print("error", derivative - num_derivative)
 
-if __name__=="__main__":
+def debug_train_test():
     num_label = 5
     num_data = 10000
     input_dimensions = 5
@@ -169,4 +177,30 @@ if __name__=="__main__":
     # debug_loss_equivalent(model, x, y)
     optimize(model, data_manager, learning_rate=0.001, num_epochs=100)
 
-    # debug_gradient_accuracy(x, y)
+
+if __name__=="__main__":
+    mnist = fetch_openml('mnist_784', version=1, parser='auto')
+    X, y = mnist["data"].to_numpy(), mnist["target"].to_numpy()
+
+    # Convert y to integer values
+    y = y.astype(int)
+
+    # Split the dataset into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Scale the features
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+
+    # Add bias term to the features
+    X_train = np.hstack((np.ones((X_train.shape[0], 1)), X_train))
+    X_test = np.hstack((np.ones((X_test.shape[0], 1)), X_test))
+
+    num_classes = 10
+    num_features = X_train.shape[1]
+
+    data_manager = DataManager(x=X_train, y=y, num_classes=num_classes, batch_size=16)
+    model = Model(num_class=num_classes, num_input_dim=num_features)
+    optimize(model, data_manager, learning_rate=1e-3, num_epochs=100, momentum=0.8)
+
