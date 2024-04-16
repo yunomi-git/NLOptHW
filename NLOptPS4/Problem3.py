@@ -64,6 +64,13 @@ def project_simplex_xlogx(x, learning_rate, gradient):
     proj /= np.sum(proj)
     return proj
 
+def optimize_admm(x, learning_rate, gradient):
+    # optimizer f(x)
+    x = optimize(f, alpha, y)
+    y = optimize(g, alpha, x)
+    alpha = x + y / 2
+    
+
 def optimize_cvxpy(A, b, n):
     x = cp.Variable(n)
     obj = cp.Minimize(0.5 * cp.square(cp.norm(A @ x - b)))
