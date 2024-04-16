@@ -177,7 +177,6 @@ def debug_train_test():
     # debug_loss_equivalent(model, x, y)
     optimize(model, data_manager, learning_rate=0.001, num_epochs=100)
 
-
 if __name__=="__main__":
     mnist = fetch_openml('mnist_784', version=1, parser='auto')
     X, y = mnist["data"].to_numpy(), mnist["target"].to_numpy()
@@ -202,5 +201,5 @@ if __name__=="__main__":
 
     data_manager = DataManager(x=X_train, y=y, num_classes=num_classes, batch_size=16)
     model = Model(num_class=num_classes, num_input_dim=num_features)
-    optimize(model, data_manager, learning_rate=1e-3, num_epochs=100, momentum=0.8)
+    optimize(model, data_manager, learning_rate=1e-3, num_epochs=200, momentum=0.5)
 
