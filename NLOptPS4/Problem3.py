@@ -7,7 +7,7 @@ def enforce_positive(x):
     return x
 
 def get_gradient(A, b, x):
-    return 2 * A.T @ (A @ x - b)
+    return A.T @ (A @ x - b)
 
 def get_objective(A, b, x):
     # return 0.5 * np.square(np.linalg.norm(A @ x - b))
@@ -77,8 +77,9 @@ def proj_simplex(x):
 
 # Question 3
 def project_simplex_xlogx(x, learning_rate, gradient):
+    # assume x is within simplex to begin
     proj = x * np.exp(-learning_rate * gradient)
-    proj = enforce_positive(proj)
+    # proj = enforce_positive(proj)
     proj /= np.sum(proj)
     return proj
 
@@ -88,14 +89,17 @@ def optimize_gradient_descent(A, b, x0, steps, learning_rate, proj_method="eucli
     # methods: euclid, log
     obj_history = [get_objective(A, b, x0)]
     x = x0
+    if proj_method == "log":
+        x = proj_simplex(x)
     for i in range(steps):
         gradient = get_gradient(A, b, x)
-        x = x - learning_rate * gradient
         # Project
         if proj_method == "euclid": # Question 2
+            x = x - learning_rate * gradient
             x = proj_simplex(x)
         else:
             x = project_simplex_xlogx(x, learning_rate, gradient) # Question 3
+            # print(get_objective(A, b, x))
         obj_history.append(get_objective(A, b, x))
     # print(x)
     return np.array(obj_history)
@@ -155,8 +159,8 @@ if __name__=="__main__":
     b = np.random.randn(m)
     x0 = np.ones(n)/n
 
-    steps = 30
-    lr = 0.2e-3
+    steps = 100
+    lr = 2e-4
 
     history_accel = optimize_nesterov_accelerated(A, b, x0, steps=steps, learning_rate=lr)
     history_proj = optimize_gradient_descent(A, b, x0, steps=steps, learning_rate=lr, proj_method="euclid")
