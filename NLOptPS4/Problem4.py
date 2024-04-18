@@ -1,25 +1,23 @@
-import numpy as np
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.datasets import fetch_openml
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
+from sklearn.metrics import accuracy_score
 
-def get_loss_derivative(W, x, y):
+def dL_dW(W, x, y):
     num_data = len(x)
 
     derivative = 0
     for i in range(num_data):
-        dLdz = log_der_matrix_i(W @ x[i], y[i])
-        dzdW = matrix_derivative_i(W, x[i])
+        dLdz = dL_dz(W @ x[i], y[i])
+        dzdW = dz_dW(W, x[i])
         dLdW = dLdz @ dzdW
         derivative += dLdW
     return - derivative / num_data
 
-def matrix_derivative_i(W, xi):
+def dz_dW(W, xi):
     num_label = np.shape(W)[0]
     num_dim = len(xi)
 
@@ -28,15 +26,12 @@ def matrix_derivative_i(W, xi):
         derivative[i, i, :] = xi
     return derivative
 
-def indicator_i(num_label, yi):
-    indicator = np.zeros((num_label))
-    indicator[yi] = 1
-    return indicator
-
-def log_der_matrix_i(zi, yi):
+def dL_dz(zi, yi):
     # zi is 1 x data
     num_label = len(zi)
-    return (-np.exp(zi)/ (np.sum(np.exp(zi))) + indicator_i(num_label, yi))
+    indicator = np.zeros((num_label))
+    indicator[yi] = 1
+    return (-np.exp(zi)/ (np.sum(np.exp(zi))) + indicator)
 
 def get_numerical_derivative(W, x, y, step):
     num_dim = np.shape(W)[1]
@@ -47,20 +42,19 @@ def get_numerical_derivative(W, x, y, step):
         for d in range(num_dim):
             W_step = np.copy(W)
             W_step[k, d] += step
-            derivative[k, d] = (loss_function(W_step, x, y) - loss_function(W, x, y)) / step
+            derivative[k, d] = (loss_function_all_data_debug(W_step, x, y) - loss_function_all_data_debug(W, x, y)) / step
     return derivative
 
 class DataManager:
-    def __init__(self, x, y, num_classes, batch_size):
+    def __init__(self, x, y, num_classes, ):
         self.num_classes = num_classes
         self.input_dim = np.shape(x)[1]
         self.x = x
         self.y = y
         self.num_data = len(x)
-        self.batch_size = batch_size
 
-    def get_random_batch(self):
-        rand_int = np.random.randint(0, self.num_data, self.batch_size)
+    def get_random_batch(self, batch_size):
+        rand_int = np.random.randint(0, self.num_data, batch_size)
         return self.x[rand_int], self.y[rand_int]
 
 class Model:
@@ -89,17 +83,12 @@ def get_accuracy(preds, y):
     num_correct = np.sum(np.equal(preds, y))
     return num_correct / len(y)
 
-def get_loss(sm, y):
+def cross_entropy_loss(y_pred, y_true):
     # sm is data x classes
     # y is data x 1
-    num_data = len(y)
-    data_indices = np.arange(num_data)
-    log = np.log(sm)
-    loss = log[data_indices, y]
-    loss = np.sum(loss)
-    return - loss / num_data
+    return -np.mean(np.log(y_pred[np.arange(len(y_true)), y_true]))
 
-def loss_function(W, x, y):
+def loss_function_all_data_debug(W, x, y):
     num_data = len(x)
 
     loss = 0
@@ -109,46 +98,45 @@ def loss_function(W, x, y):
         log = np.log(sm)
         loss_i = log[y[i]]
         loss += loss_i
-    loss = - loss / num_data
+    loss = - np.mean(loss)
     return loss
 
 def debug_loss_equivalent(model: Model, x, y):
-    loss_nowmal = loss_function(model.W, x, y)
+    loss_nowmal = loss_function_all_data_debug(model.W, x, y)
     sm = model.forward(x)
-    loss_model = get_loss(sm, y)
+    loss_model = cross_entropy_loss(sm, y)
     print(loss_nowmal)
     print(loss_model)
 
 
-def optimize(model: Model, data_manager: DataManager, learning_rate, num_epochs, momentum=1.0):
-    num_iterations = int(data_manager.num_data / data_manager.batch_size)
+def optimize(model: Model, data_manager: DataManager, learning_rate, num_epochs, batch_size, momentum=0.0):
+    num_iterations = int(data_manager.num_data / batch_size)
     accuracy_history = []
     for e in tqdm(range(num_epochs)):
         loss = 0
         preds = []
         actual = []
-        momentum_gradient = 0
+        gradient_with_momentum = np.zeros(model.W.shape)
         for i in range(num_iterations):
-            x_batch, y_batch = data_manager.get_random_batch()
+            x_batch, y_batch = data_manager.get_random_batch(batch_size)
             sm = model.forward(x_batch)
-            gradient = get_loss_derivative(model.W, x_batch, y_batch)
-            momentum_gradient += momentum * gradient + (1 - momentum) * momentum_gradient
-            model.W = model.W - learning_rate * gradient
+            gradient = dL_dW(model.W, x_batch, y_batch)
+            gradient_with_momentum = (1 - momentum) * gradient + momentum * gradient_with_momentum
+            model.W = model.W - learning_rate * gradient_with_momentum
 
             # Logging
             preds.append(model.get_logits(sm))
             actual.append(y_batch)
-            loss += get_loss(sm, y_batch)
+            loss += cross_entropy_loss(sm, y_batch) * batch_size
 
         print("Epoch:", e)
         preds = np.concatenate(preds)
         actual = np.concatenate(actual)
-        accuracy = get_accuracy(preds, actual)
+        accuracy = accuracy_score(actual, preds)
         print("Accuracy: ", accuracy)
         print("Loss: ", loss / data_manager.num_data)
         accuracy_history.append(accuracy)
-    plt.plot(accuracy_history)
-    plt.show()
+    return accuracy_history
 
 
 def debug_gradient_accuracy():
@@ -159,7 +147,7 @@ def debug_gradient_accuracy():
     x = np.random.rand(num_data, input_dimensions)
     x = np.concatenate([np.ones((num_data, 1)), x], axis=1)
     W = np.random.rand(num_label, input_dimensions+1)
-    derivative = get_loss_derivative(W, x, y)
+    derivative = dL_dW(W, x, y)
     num_derivative = get_numerical_derivative(W, x, y, step=0.001)
     print("error", derivative - num_derivative)
 
@@ -176,6 +164,69 @@ def debug_train_test():
     model = Model(num_class=num_label, num_input_dim=input_dimensions+1)
     # debug_loss_equivalent(model, x, y)
     optimize(model, data_manager, learning_rate=0.001, num_epochs=100)
+
+
+def test_batch(data_manager):
+    # Batch Size
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    momentum = 0.0
+    lr = 1e-3
+    batch_sizes = [1, 4, 16, 32]
+    for batch_size in batch_sizes:
+        model = Model(num_class=num_classes, num_input_dim=num_features)
+        run = optimize(model, data_manager, learning_rate=lr, num_epochs=100, batch_size=batch_size,
+                        momentum=momentum)
+        ax.plot(np.arange(len(run)), run, linewidth=2,
+                label='batch=' + str(batch_size) + ', lr=' + str(lr) + ', mom=' + str(momentum))
+    # Set labels and title
+    ax.set_xlabel('Number of Epochs')
+    ax.set_ylabel('Accuracy')
+    ax.set_title('Accuracy v.s. Epoch')
+    # Add a legend
+    ax.legend()
+    plt.show()
+
+def test_lr(data_manager, momentum=0.0, batch_size=8):
+    # Batch Size
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    lrs = [1e-2, 1e-3, 1e-4, 1e-5]
+    for lr in lrs:
+        model = Model(num_class=num_classes, num_input_dim=num_features)
+        run = optimize(model, data_manager, learning_rate=lr, num_epochs=100, batch_size=batch_size,
+                        momentum=momentum)
+        ax.plot(np.arange(len(run)), run, linewidth=2,
+                label='batch=' + str(batch_size) + ', lr=' + str(lr) + ', mom=' + str(momentum))
+    # Set labels and title
+    ax.set_xlabel('Number of Epochs')
+    ax.set_ylabel('Accuracy')
+    ax.set_title('Accuracy v.s. Epoch')
+    # Add a legend
+    ax.legend()
+    plt.show()
+
+
+def test_momentum(data_manager):
+    # Batch Size
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    lr = 1e-3
+    batch_size = 8
+    momentums = [0.0, 0.5, 0.9, 0.99]
+    for momentum in momentums:
+        model = Model(num_class=num_classes, num_input_dim=num_features)
+        run = optimize(model, data_manager, learning_rate=lr, num_epochs=100, batch_size=batch_size,
+                        momentum=momentum)
+        ax.plot(np.arange(len(run)), run, linewidth=2,
+                label='batch=' + str(batch_size) + ', lr=' + str(lr) + ', mom=' + str(momentum))
+    # Set labels and title
+    ax.set_xlabel('Number of Epochs')
+    ax.set_ylabel('Accuracy')
+    ax.set_title('Accuracy v.s. Epoch')
+    # Add a legend
+    ax.legend()
+    plt.show()
 
 if __name__=="__main__":
     mnist = fetch_openml('mnist_784', version=1, parser='auto')
@@ -199,7 +250,9 @@ if __name__=="__main__":
     num_classes = 10
     num_features = X_train.shape[1]
 
-    data_manager = DataManager(x=X_train, y=y, num_classes=num_classes, batch_size=16)
-    model = Model(num_class=num_classes, num_input_dim=num_features)
-    optimize(model, data_manager, learning_rate=1e-3, num_epochs=200, momentum=0.5)
+    data_manager = DataManager(x=X_train, y=y, num_classes=num_classes)
+    print("Num Data", data_manager.num_data)
 
+    # test_batch(data_manager)
+    test_lr(data_manager, batch_size=8, momentum=0.9)
+    # test_momentum(data_manager)
