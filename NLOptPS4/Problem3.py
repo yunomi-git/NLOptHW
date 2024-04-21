@@ -18,10 +18,8 @@ def get_objective(A, b, x):
 def optimize_cvxpy(A, b, n):
     x = cp.Variable(n)
     obj = cp.Minimize(0.5 * cp.square(cp.norm(A @ x - b)))
-    # We use cp.SOC(t, x) to create the SOC constraint ||x||_2 <= t.
     constraints = [x >= 0, cp.sum(x) == 1]
-    prob = cp.Problem(obj,
-                      constraints)
+    prob = cp.Problem(obj, constraints)
     prob.solve()
     x_sol = np.array(x.value)
     return x_sol
@@ -30,7 +28,8 @@ def optimize_cvxpy(A, b, n):
 #######################################################################
 # Question 2
 def find_bounds(func, lower_x, upper_x):
-    # For decreasing function
+    # expand lower/upper x until they produce different signed values
+    # Assume func is decreasing
     upper_val = func(upper_x)
     while upper_val > 0:
         prev_lower_x = lower_x
@@ -47,7 +46,7 @@ def find_bounds(func, lower_x, upper_x):
 
 def bisection_search(func, lower_x=-1.0, upper_x=1.0, tolerance=1e-8, max_steps = 200):
     lower_x, upper_x = find_bounds(func, lower_x, upper_x)
-    # for decreasing functions
+    # for decreasing functions func
     test_x = (lower_x + upper_x) / 2.0
     test_val = func(test_x)
     step = 0

@@ -112,11 +112,12 @@ def debug_loss_equivalent(model: Model, x, y):
 def optimize(model: Model, data_manager: DataManager, learning_rate, num_epochs, batch_size, momentum=0.0):
     num_iterations = int(data_manager.num_data / batch_size)
     accuracy_history = []
+    gradient_with_momentum = np.zeros(model.W.shape)
     for e in tqdm(range(num_epochs)):
         loss = 0
         preds = []
         actual = []
-        gradient_with_momentum = np.zeros(model.W.shape)
+
         for i in range(num_iterations):
             x_batch, y_batch = data_manager.get_random_batch(batch_size)
             sm = model.forward(x_batch)
