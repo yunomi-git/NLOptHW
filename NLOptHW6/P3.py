@@ -5,17 +5,19 @@ from scipy.stats import norm
 #################
 # generating data
 
-f = lambda x: x**2 / 3 - 3 * x * np.sin(x-2) - np.cos(x)
+# f = lambda x: x**2 / 3 - 3 * x * np.sin(x-2) - np.cos(x)
+f = lambda x: x*np.cos(x) / 3
 m = lambda x: np.zeros_like(x)
 
 #################
 
 def K_rbf(x, y, k, sigma):
     # return k * np.exp(- np.linalg.norm(x - y, axis=-1) ** 2 / (2.0 * sigma))
-    return k * np.exp(- (x - y) ** 2 / (2.0 * sigma))
+    return k * np.exp(- 0.5 * ((x - y) / sigma)**2)
 
 def pdf(x, mu, sigma):
-    return 1.0 / (sigma * np.sqrt(2 * np.pi)) * np.exp(- (x - mu) ** 2 / (2.0 * sigma))
+    # print(1.0 / (sigma * np.sqrt(2 * np.pi)) * np.exp(- 0.5 * ((x - mu) / sigma)**2), x - mu, sigma)
+    return 1.0 / (sigma * np.sqrt(2 * np.pi)) * np.exp(- 0.5 * ((x - mu) / sigma)**2)
 
 def repeat_first_dim(x, num_repeats):
     return np.stack(np.repeat(x[np.newaxis, :], axis=0, repeats=num_repeats), axis=0)
@@ -47,16 +49,13 @@ def compute_post(grid_x, m, observed_x, observed_f, k_rbf, sigma_rbf):
 
     # Calculate each value in grid
     for i in range(len(grid_x)):
-        x = np.array([grid_x[i]])
-        input_cov = K_rbf(np.repeat(np.array([x]), repeats=num_observations), observed_x, k=k_rbf, sigma=sigma_rbf)
+        x = grid_x[i]
+        input_cov = K_rbf(x, observed_x, k=k_rbf, sigma=sigma_rbf)
 
-        if len(cov_matrix.shape) == 1:
-            mu_x[i] = m(x) + input_cov.T * 1.0 / cov_matrix * error
-            sigma_x[i] = K_rbf(x, x, k=k_rbf, sigma=sigma_rbf) + input_cov.T * 1.0 / cov_matrix * error
-        else:
-            mu_x[i] = m(x) + input_cov.T @ cov_error_product
-            sigma_x[i] = K_rbf(x, x, k=k_rbf, sigma=sigma_rbf) + input_cov.T @ cov_error_product
+        mu_x[i] = m(x) + input_cov.T @ cov_error_product
+        sigma_x[i] = K_rbf(x, x, k=k_rbf, sigma=sigma_rbf) - input_cov.T @ np.linalg.solve(cov_matrix, input_cov)
 
+    sigma_x[sigma_x < 0] = 1e-10
     ##############################
 
     return mu_x, sigma_x
@@ -76,7 +75,7 @@ def EI(f_star, mu_x, sigma_x, grid_x):
         sigma = sigma_x[i]
         mu = mu_x[i]
         EI_x[i] = (sigma ** 2 * pdf(f_star, mu, sigma) +
-                   (f_star - mu) * norm.cdf(f_star, loc=mu, scale=sigma))
+                   (f_star - mu) * norm.cdf((f_star - mu / sigma)))
 
     ##############################
     return EI_x
@@ -117,14 +116,8 @@ def Bayesian_EI(max_iter=20, k_rbf=1, sigma_rbf=1, grid_range=[-10, 10], grid_fr
     mu_trajectory = np.zeros((len(grid_x), max_iter))
     sigma_trajectory = np.zeros((len(grid_x), max_iter))
 
-    def f(x):
-        return 1.0 / 3.0 * x**2 - 3 * x * np.sin(x - 2) - np.cos(x)
-
-    def m(x):
-        return 0
-
-    observed_f = f(observed_x)
-    f_star = min(observed_f)
+    observed_f = f(observed_x[0])
+    f_star = observed_f
 
     for i_iter in range(max_iter):
         #############################
@@ -140,12 +133,12 @@ def Bayesian_EI(max_iter=20, k_rbf=1, sigma_rbf=1, grid_range=[-10, 10], grid_fr
 
         # Calculate acquisition for all points
         acquisition_grid = EI(f_star,
-                              mu_x=mu_x,
-                              sigma_x=sigma_x,
-                              grid_x=grid_x)
+                              mu_x=mu_x[unqueried_index],
+                              sigma_x=sigma_x[unqueried_index],
+                              grid_x=grid_x[unqueried_index])
 
         # Query point is the maximization
-        descending_order = np.argsort(acquisition_grid[unqueried_index])
+        descending_order = np.argsort(acquisition_grid)
         grid_indices = np.arange(len(grid_x))[unqueried_index]
         grid_indices = grid_indices[descending_order]
         index_to_query = grid_indices[0]
@@ -187,14 +180,8 @@ def Bayesian_LCB(max_iter=20, k_rbf=1, sigma_rbf=1, beta=1, grid_range=[-10, 10]
     mu_trajectory = np.zeros((len(grid_x), max_iter))
     sigma_trajectory = np.zeros((len(grid_x), max_iter))
 
-    def f(x):
-        return 1.0 / 3.0 * x**2 - 3 * x * np.sin(x - 2) - np.cos(x)
-
-    def m(x):
-        return 0
-
-    observed_f = f(observed_x)
-    f_star = min(observed_f)
+    observed_f = f(observed_x[0])
+    f_star = observed_f
 
     for i_iter in range(max_iter):
         #############################
@@ -208,13 +195,14 @@ def Bayesian_LCB(max_iter=20, k_rbf=1, sigma_rbf=1, beta=1, grid_range=[-10, 10]
                                      sigma_rbf=sigma_rbf)
 
         # Calculate acquisition for all points
-        acquisition_grid = EI(f_star,
-                              mu_x=mu_x,
-                              sigma_x=sigma_x,
-                              grid_x=grid_x)
+        acquisition_grid = LCB(f_star,
+                               mu_x=mu_x[unqueried_index],
+                               sigma_x=sigma_x[unqueried_index],
+                               grid_x=grid_x[unqueried_index],
+                               beta=beta)
 
         # Query point is the maximization
-        descending_order = np.argsort(acquisition_grid[unqueried_index])
+        descending_order = np.argsort(acquisition_grid)
         grid_indices = np.arange(len(grid_x))[unqueried_index]
         grid_indices = grid_indices[descending_order]
         index_to_query = grid_indices[0]
@@ -236,14 +224,16 @@ def Bayesian_LCB(max_iter=20, k_rbf=1, sigma_rbf=1, beta=1, grid_range=[-10, 10]
 
 if __name__=="__main__":
     # plot (try different sigma and beta)
-    # observed_x, mu_trajectory, sigma_trajectory = Bayesian_EI(max_iter = 10, k_rbf=1, sigma_rbf=1)
-    observed_x, mu_trajectory, sigma_trajectory = Bayesian_LCB(max_iter = 20, k_rbf=5, sigma_rbf=2, beta = 1)
+    grid_range = [-3, 6]
+    num_runs = 10
+    observed_x, mu_trajectory, sigma_trajectory = Bayesian_EI(max_iter = 10, k_rbf=1, sigma_rbf=1, grid_range=grid_range)
+    # observed_x, mu_trajectory, sigma_trajectory = Bayesian_LCB(max_iter = 10, k_rbf=1, sigma_rbf=1, beta = 1, grid_range=grid_range)
 
     # Generate x values
-    grid_x = np.arange(-10, 10, 0.1)
+    grid_x = np.arange(grid_range[0], grid_range[1], 0.1)
 
     # Create the figure and axes objects
-    fig, axes = plt.subplots(nrows=5, ncols=2, figsize=(10, 40))
+    fig, axes = plt.subplots(nrows=num_runs//2, ncols=2, figsize=(10, 40))
 
     for i_ax in range(len(axes.flatten())):
         ax = axes.flatten()[i_ax]
