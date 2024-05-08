@@ -74,8 +74,10 @@ def EI(f_star, mu_x, sigma_x, grid_x):
     for i in range(len(grid_x)):
         sigma = sigma_x[i]
         mu = mu_x[i]
-        EI_x[i] = (sigma ** 2 * pdf(f_star, mu, sigma) +
-                   (f_star - mu) * norm.cdf((f_star - mu / sigma)))
+        # EI_x[i] = (sigma ** 2 * pdf(f_star, mu, sigma) +
+        #            (f_star - mu) * norm.cdf((f_star - mu / sigma)))
+        EI_x[i] = (sigma ** 2 * norm.pdf(f_star, scale=sigma, loc=mu) +
+                   (f_star - mu) * norm.cdf(f_star, loc=mu, scale=sigma))
 
     ##############################
     return EI_x
@@ -138,7 +140,7 @@ def Bayesian_EI(max_iter=20, k_rbf=1, sigma_rbf=1, grid_range=[-10, 10], grid_fr
                               grid_x=grid_x[unqueried_index])
 
         # Query point is the maximization
-        descending_order = np.argsort(acquisition_grid)
+        descending_order = np.argsort(acquisition_grid)[::-1]
         grid_indices = np.arange(len(grid_x))[unqueried_index]
         grid_indices = grid_indices[descending_order]
         index_to_query = grid_indices[0]
@@ -149,6 +151,7 @@ def Bayesian_EI(max_iter=20, k_rbf=1, sigma_rbf=1, grid_range=[-10, 10], grid_fr
         # Save values
         if f_query < f_star:
             f_star = f_query
+
         observed_x = np.append(observed_x, x_query)
         observed_f = np.append(observed_f, f_query)
         mu_trajectory[:, i_iter] = mu_x
@@ -202,9 +205,9 @@ def Bayesian_LCB(max_iter=20, k_rbf=1, sigma_rbf=1, beta=1, grid_range=[-10, 10]
                                beta=beta)
 
         # Query point is the maximization
-        descending_order = np.argsort(acquisition_grid)
+        ascending_order = np.argsort(acquisition_grid)
         grid_indices = np.arange(len(grid_x))[unqueried_index]
-        grid_indices = grid_indices[descending_order]
+        grid_indices = grid_indices[ascending_order]
         index_to_query = grid_indices[0]
         # index_to_query = np.argmax(acquisition_grid[unqueried_index])
         x_query = grid_x[index_to_query]
