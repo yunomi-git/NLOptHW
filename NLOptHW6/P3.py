@@ -5,8 +5,8 @@ from scipy.stats import norm
 #################
 # generating data
 
-# f = lambda x: x**2 / 3 - 3 * x * np.sin(x-2) - np.cos(x)
-f = lambda x: x*np.cos(x) / 3
+f = lambda x: x**2 / 3 - 3 * x * np.sin(x-2) - np.cos(x)
+# f = lambda x: x*np.cos(x) / 3
 m = lambda x: np.zeros_like(x)
 
 #################
@@ -227,10 +227,10 @@ def Bayesian_LCB(max_iter=20, k_rbf=1, sigma_rbf=1, beta=1, grid_range=[-10, 10]
 
 if __name__=="__main__":
     # plot (try different sigma and beta)
-    grid_range = [-3, 6]
-    num_runs = 10
-    observed_x, mu_trajectory, sigma_trajectory = Bayesian_EI(max_iter = 10, k_rbf=1, sigma_rbf=1, grid_range=grid_range)
-    # observed_x, mu_trajectory, sigma_trajectory = Bayesian_LCB(max_iter = 10, k_rbf=1, sigma_rbf=1, beta = 1, grid_range=grid_range)
+    grid_range = [-10, 10]
+    num_runs = 20
+    observed_x, mu_trajectory, sigma_trajectory = Bayesian_EI(max_iter = num_runs, k_rbf=1, sigma_rbf=5, grid_range=grid_range)
+    # observed_x, mu_trajectory, sigma_trajectory = Bayesian_LCB(max_iter = num_runs, k_rbf=1, sigma_rbf=5, beta = 1, grid_range=grid_range)
 
     # Generate x values
     grid_x = np.arange(grid_range[0], grid_range[1], 0.1)
