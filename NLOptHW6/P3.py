@@ -1,3 +1,5 @@
+# Problem 3
+
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm
@@ -133,18 +135,17 @@ def Bayesian_EI(max_iter=20, k_rbf=1, sigma_rbf=1, grid_range=[-10, 10], grid_fr
                                      k_rbf=k_rbf,
                                      sigma_rbf=sigma_rbf)
 
-        # Calculate acquisition for all points
+        # Calculate acquisition for unqueried points
         acquisition_grid = EI(f_star,
                               mu_x=mu_x[unqueried_index],
                               sigma_x=sigma_x[unqueried_index],
                               grid_x=grid_x[unqueried_index])
 
-        # Query point is the maximization
+        # Query point is the maximization. Need to recalculate indices over unqueried points
         descending_order = np.argsort(acquisition_grid)[::-1]
         grid_indices = np.arange(len(grid_x))[unqueried_index]
         grid_indices = grid_indices[descending_order]
         index_to_query = grid_indices[0]
-        # index_to_query = np.argmax(acquisition_grid[unqueried_index])
         x_query = grid_x[index_to_query]
         f_query = f(x_query)
 
@@ -197,19 +198,18 @@ def Bayesian_LCB(max_iter=20, k_rbf=1, sigma_rbf=1, beta=1, grid_range=[-10, 10]
                                      k_rbf=k_rbf,
                                      sigma_rbf=sigma_rbf)
 
-        # Calculate acquisition for all points
+        # Calculate acquisition for unqueried points
         acquisition_grid = LCB(f_star,
                                mu_x=mu_x[unqueried_index],
                                sigma_x=sigma_x[unqueried_index],
                                grid_x=grid_x[unqueried_index],
                                beta=beta)
 
-        # Query point is the maximization
+        # Query point is the minimization. Need to recalculate indices over unqueried points
         ascending_order = np.argsort(acquisition_grid)
         grid_indices = np.arange(len(grid_x))[unqueried_index]
         grid_indices = grid_indices[ascending_order]
         index_to_query = grid_indices[0]
-        # index_to_query = np.argmax(acquisition_grid[unqueried_index])
         x_query = grid_x[index_to_query]
         f_query = f(x_query)
 
@@ -229,8 +229,8 @@ if __name__=="__main__":
     # plot (try different sigma and beta)
     grid_range = [-10, 10]
     num_runs = 20
-    observed_x, mu_trajectory, sigma_trajectory = Bayesian_EI(max_iter = num_runs, k_rbf=1, sigma_rbf=5, grid_range=grid_range)
-    # observed_x, mu_trajectory, sigma_trajectory = Bayesian_LCB(max_iter = num_runs, k_rbf=1, sigma_rbf=5, beta = 1, grid_range=grid_range)
+    # observed_x, mu_trajectory, sigma_trajectory = Bayesian_EI(max_iter = num_runs, k_rbf=1, sigma_rbf=5, grid_range=grid_range)
+    observed_x, mu_trajectory, sigma_trajectory = Bayesian_LCB(max_iter = num_runs, k_rbf=1, sigma_rbf=1, beta = 10, grid_range=grid_range)
 
     # Generate x values
     grid_x = np.arange(grid_range[0], grid_range[1], 0.1)

@@ -1,3 +1,5 @@
+# Problem 4
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -202,15 +204,38 @@ U_kuhn = np.array([
      +1.33e+00, +1.00e+00, +1.33e+00, +1.00e+00, ],
 ])
 
+def get_uniform(length):
+    return np.ones(length) / (1.0 * length)
+
+def get_hindsight_minimums(x_avg, y_avg, U):
+    # Closed form of the minimizers of hindsight regret
+    # Solutions maximize / minimize dot product and are thus just the normalizations
+    # If solutions are exactly 0, return uniform
+
+    x_min = U @ y_avg
+    if (x_min == 0).all():
+        x_min = get_uniform(len(x_min))
+    else:
+        x_min /= np.linalg.norm(x_min)
+
+    y_min = - x_avg.T @ U
+    if (y_min == 0).all():
+        y_min = get_uniform(len(y_min))
+    else:
+        y_min /= np.linalg.norm(y_min)
+
+    return x_min, y_min
 
 #################
 def game_normalize(regrets):
-    pass
-
     # normalize regrets to get strategy
 
     #############################
     # write your code here
+    if np.sum(regrets) == 0:
+        return get_uniform(len(regrets))
+    else:
+        return regrets / np.sum(regrets)
 
 
     ##############################
@@ -220,31 +245,60 @@ def RM(U, max_iter=10000):
     # max_iter: number of iterations
 
     # record regret
-    reg_trajectory = np.zeros((max_iter,))
+    reg1_trajectory = np.zeros((max_iter,))
+    reg2_trajectory = np.zeros((max_iter,))
 
-    regrets_pl1 = np.zeros(U.shape[0])
-    regrets_pl2 = np.zeros(U.shape[1])
+    # regrets_pl1 = np.zeros(U.shape[0])
+    # regrets_pl2 = np.zeros(U.shape[1])
 
-    x_avg = np.zeros_like(regrets_pl1)
-    y_avg = np.zeros_like(regrets_pl2)
+    reg_sum = 0
+
+    x_sum = np.zeros(U.shape[0])
+    y_sum = np.zeros(U.shape[1])
 
     for t in range(max_iter):
-        pass
+        x = (t + 1) * U @ y_sum - reg_sum
+        x[x < 0] = 0
+        x = game_normalize(x)
+
+        y = (t + 1) * x_sum.T @ U - reg_sum
+        y[y < 0] = 0
+        y = game_normalize(y)
+
+        # Save values
+        x_sum += x
+        y_sum += y
+
+        # Update regrets
+        x_min_hind, y_min_hind = get_hindsight_minimums(x_sum, y_sum, U)
+
+        reg_sum += x.T @ U @ y
+        reg1_trajectory[t] = - reg_sum + x_min_hind.T @ U @ y_sum
+        reg2_trajectory[t] = reg_sum - x_sum.T @ U @ y_min_hind
 
         #############################
         # write your code here
 
         ##############################
 
-    print("The value of the game is {}".format(x_avg @ U @ y_avg))
+    print("The value of the game is {}".format(x_sum @ U @ y_sum / (max_iter ** 2)))
 
-    return reg_trajectory
+    return reg1_trajectory, reg2_trajectory
 
 
 def soft_max(z):
     #############################
     # write your code here
-    pass
+    # z is  x classes
+    sm = np.exp(z)
+    sm /= np.sum(sm)
+    return sm
+
+    # num_classes = len(z)
+    # numerator = np.exp(z)
+    # denominator = np.sum(np.exp(z), axis=0)  # per data
+    # denominator = np.repeat(denominator[:, np.newaxis], axis=0, repeats=num_classes)  #  x classes
+    # return numerator / denominator
 
     ##############################
 
@@ -254,66 +308,124 @@ def MWU(U, eta=1, max_iter=10000):
     # max_iter: number of iterations
 
     # record regret
-    reg_trajectory = np.zeros((max_iter,))
-    value_trajectory = np.zeros((max_iter,))
+    # reg_trajectory = np.zeros((max_iter,))
+    # value_trajectory = np.zeros((max_iter,))
+    reg1_trajectory = np.zeros((max_iter,))
+    reg2_trajectory = np.zeros((max_iter,))
+
+
+    reg_sum = 0
 
     regrets_pl1 = np.zeros(U.shape[0])
     regrets_pl2 = np.zeros(U.shape[1])
 
-    x_avg = np.zeros_like(regrets_pl1)
-    y_avg = np.zeros_like(regrets_pl2)
+    x_sum = np.zeros_like(regrets_pl1)
+    y_sum = np.zeros_like(regrets_pl2)
 
     for t in range(max_iter):
-        pass
+        x = eta * U @ y_sum
+        x = soft_max(x)
+
+        y = -eta * U.T @ x_sum
+        y = soft_max(y)
+
+        # Save values
+        x_sum += x
+        y_sum += y
+
+        # Update regrets
+        x_min_hind, y_min_hind = get_hindsight_minimums(x_sum, y_sum, U)
+
+        reg_sum += x.T @ U @ y
+        reg1_trajectory[t] = - reg_sum + x_min_hind.T @ U @ y_sum
+        reg2_trajectory[t] = reg_sum - x_sum.T @ U @ y_min_hind
+
         #############################
         # write your code here
 
         ##############################
 
-    print("The value of the game is {}".format(x_avg @ U @ y_avg))
+    print("The value of the game is {}".format(x_sum @ U @ y_sum / (max_iter ** 2)))
 
-    return reg_trajectory
+    return reg1_trajectory, reg2_trajectory
 
 if __name__=="__main__":
+    def plot_trajectories(traj1, traj2, traj3, traj4, game):
+        fig, ax = plt.subplots()
+
+        # Plot the data
+        ax.plot(traj1, linewidth=2, label='RM -- ' + game)
+        ax.plot(traj2, linewidth=2, label='MWU -- ' + game + ' (eta=0.1)')
+        ax.plot(traj3, linewidth=2, label='MWU -- ' + game + ' (eta=0.5)')
+        ax.plot(traj4, linewidth=2, label='MWU -- ' + game + ' (eta=1)')
+        # Set labels and title
+        ax.set_xlabel('Number of iteration')
+        ax.set_ylabel('Regret')
+        ax.set_title('Regret v.s. Number of iteration')
+
+        # Add a legend
+        ax.legend()
+
+        # Display the plot
+        plt.show()
+
+    reg_trajectory1 = RM(U_rps, max_iter=10000)
+    reg_trajectory2 = MWU(U_rps, eta=0.1, max_iter=10000)
+    reg_trajectory3 = MWU(U_rps, eta=0.5, max_iter=10000)
+    reg_trajectory4 = MWU(U_rps, eta=1, max_iter=10000)
+
+    plot_trajectories(reg_trajectory1[0], reg_trajectory2[0], reg_trajectory3[0], reg_trajectory4[0], 'rps')
+    plot_trajectories(reg_trajectory1[1], reg_trajectory2[1], reg_trajectory3[1], reg_trajectory4[1], 'rps')
+
+    # Problem 2
+    reg_trajectory5 = RM(U_kuhn, max_iter=10000)
+    reg_trajectory6 = MWU(U_kuhn, eta=0.1, max_iter=10000)
+    reg_trajectory7 = MWU(U_kuhn, eta=0.5, max_iter=10000)
+    reg_trajectory8 = MWU(U_kuhn, eta=1, max_iter=10000)
+    plot_trajectories(reg_trajectory5[0], reg_trajectory6[0], reg_trajectory7[0], reg_trajectory8[0], 'kuhn')
+    plot_trajectories(reg_trajectory5[1], reg_trajectory6[1], reg_trajectory7[1], reg_trajectory8[1], 'kuhn')
+
     reg_trajectory1 = RM(U_rps, max_iter=10000)
     reg_trajectory2 = MWU(U_rps, eta=0.1, max_iter=10000)
     reg_trajectory3 = MWU(U_rps, eta=0.5, max_iter=10000)
     reg_trajectory4 = MWU(U_rps, eta=1, max_iter=10000)
     fig, ax = plt.subplots()
+    #
+    # # Plot the data
+    # ax.plot(np.arange(len(reg_trajectory1)), reg_trajectory1, linewidth=2, label='RM -- rps')
+    # ax.plot(np.arange(len(reg_trajectory2)), reg_trajectory2, linewidth=2, label='MWU -- rps (eta=0.1)')
+    # ax.plot(np.arange(len(reg_trajectory3)), reg_trajectory3, linewidth=2, label='MWU -- rps (eta=0.5)')
+    # ax.plot(np.arange(len(reg_trajectory4)), reg_trajectory4, linewidth=2, label='MWU -- rps (eta=1)')
+    # # Set labels and title
+    # ax.set_xlabel('Number of iteration')
+    # ax.set_ylabel('Regret')
+    # ax.set_title('Regret v.s. Number of iteration')
+    #
+    # # Add a legend
+    # ax.legend()
+    #
+    # # Display the plot
+    # plt.show()
 
-    # Plot the data
-    ax.plot(np.arange(len(reg_trajectory1)), reg_trajectory1, linewidth=2, label='RM -- rps')
-    ax.plot(np.arange(len(reg_trajectory2)), reg_trajectory2, linewidth=2, label='MWU -- rps (eta=0.1)')
-    ax.plot(np.arange(len(reg_trajectory3)), reg_trajectory3, linewidth=2, label='MWU -- rps (eta=0.5)')
-    ax.plot(np.arange(len(reg_trajectory4)), reg_trajectory4, linewidth=2, label='MWU -- rps (eta=1)')
-    # Set labels and title
-    ax.set_xlabel('Number of iteration')
-    ax.set_ylabel('Regret')
-    ax.set_title('Regret v.s. Number of iteration')
-
-    # Add a legend
-    ax.legend()
-
-    # Display the plot
-    plt.show()
-    reg_trajectory5 = RM(U_kuhn, max_iter=10000)
-    reg_trajectory6 = MWU(U_kuhn, eta=0.1, max_iter=10000)
-    reg_trajectory7 = MWU(U_kuhn, eta=0.5, max_iter=10000)
-    reg_trajectory8 = MWU(U_kuhn, eta=1, max_iter=10000)
-    fig, ax = plt.subplots()
-
-    # Plot the data
-    ax.plot(np.arange(len(reg_trajectory5)), reg_trajectory5, linewidth=2, label='RM -- kuhn')
-    ax.plot(np.arange(len(reg_trajectory6)), reg_trajectory6, linewidth=2, label='MWU -- kuhn (eta=0.1)')
-    ax.plot(np.arange(len(reg_trajectory7)), reg_trajectory7, linewidth=2, label='MWU -- kuhn (eta=0.5)')
-    ax.plot(np.arange(len(reg_trajectory8)), reg_trajectory8, linewidth=2, label='MWU -- kuhn (eta=1)')
-    # Set labels and title
-    ax.set_xlabel('Number of iteration')
-    ax.set_ylabel('Regret')
-    ax.set_title('Regret v.s. Number of iteration')
-
-    # Add a legend
-    ax.legend()
-
-    # Display the plot
-    plt.show()
+    # # Problem 2
+    # reg_trajectory5 = RM(U_kuhn, max_iter=10000)
+    # reg_trajectory6 = MWU(U_kuhn, eta=0.1, max_iter=10000)
+    # reg_trajectory7 = MWU(U_kuhn, eta=0.5, max_iter=10000)
+    # reg_trajectory8 = MWU(U_kuhn, eta=1, max_iter=10000)
+    # fig, ax = plt.subplots()
+    #
+    # # Plot the data
+    # ax.plot(np.arange(len(reg_trajectory5)), reg_trajectory5, linewidth=2, label='RM -- kuhn')
+    # ax.plot(np.arange(len(reg_trajectory6)), reg_trajectory6, linewidth=2, label='MWU -- kuhn (eta=0.1)')
+    # ax.plot(np.arange(len(reg_trajectory7)), reg_trajectory7, linewidth=2, label='MWU -- kuhn (eta=0.5)')
+    # ax.plot(np.arange(len(reg_trajectory8)), reg_trajectory8, linewidth=2, label='MWU -- kuhn (eta=1)')
+    # # Set labels and title
+    # ax.set_xlabel('Number of iteration')
+    # ax.set_ylabel('Regret')
+    # ax.set_title('Regret v.s. Number of iteration')
+    #
+    # # Add a legend
+    # ax.legend()
+    #
+    # # Display the plot
+    # plt.show()
