@@ -56,8 +56,9 @@ def compute_post(grid_x, m, observed_x, observed_f, k_rbf, sigma_rbf):
 
         mu_x[i] = m(x) + input_cov.T @ cov_error_product
         sigma_x[i] = K_rbf(x, x, k=k_rbf, sigma=sigma_rbf) - input_cov.T @ np.linalg.solve(cov_matrix, input_cov)
+        sigma_x[i] = np.sqrt(sigma_x[i])
 
-    sigma_x[sigma_x < 0] = 1e-10
+    sigma_x[sigma_x <= 0] = 1e-10
     ##############################
 
     return mu_x, sigma_x
